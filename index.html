@@ -79,6 +79,13 @@ canvas{display:block;width:100%;height:auto;aspect-ratio:16/9;touch-action:none;
 .play,.drawer{display:contents}
 header{order:1}.stage{order:2}.status{order:3}.tools{order:4}.helm{order:5}.controls:not(.helm){order:6}.hint{order:7}
 .drawer-top,.mhud,.mbtns,.touch-hint,.rotate-tip{display:none}
+/* installeret som app: kun på langs. Android låses via manifest/screen.orientation; iOS kan ikke låses, så her dækker en besked skærmen på højkant */
+.turn{display:none}
+@media (orientation:portrait){body.pwa .turn{display:flex;position:fixed;inset:0;z-index:9999;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center;background:var(--bg);color:var(--fg)}}
+.turn svg{width:96px;height:96px;color:var(--accent);animation:turnIt 2.4s ease-in-out infinite}
+.turn b{font-family:var(--display);font-weight:400;font-size:30px;color:var(--accent)}
+.turn span{color:var(--muted);font-size:17px}
+@keyframes turnIt{0%,20%{transform:rotate(0)}50%,80%{transform:rotate(-90deg)}100%{transform:rotate(0)}}
 button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 @media (pointer:coarse) and (orientation:portrait){
   .rotate-tip{display:block;order:0;margin:0;padding:10px 14px;border-radius:6px;background:var(--panel2);border:1px solid var(--accent);color:var(--accent);font-weight:700;letter-spacing:.03em}
@@ -227,6 +234,11 @@ body.mobile .sheet h2{font-size:24px}
 .sheet>*{flex-shrink:0}
 </style>
 
+<div class="turn" id="turnTip" role="alert">
+  <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" aria-hidden="true"><rect x="20" y="6" width="24" height="44" rx="4"/><path d="M29 44h6" stroke-linecap="round"/></svg>
+  <b>Drej skærmen på langs</b>
+  <span>Sænk Skibet spilles med skærmen liggende.</span>
+</div>
 <div class="wrap">
   <p class="rotate-tip">Vend telefonen på langs for at spille i fuld skærm.</p>
   <div class="play" id="play">
@@ -1973,8 +1985,9 @@ function render(){
 }
 
 /* ---------- løkke ---------- */
-let last=performance.now(),fc=0;
+let last=performance.now(),fc=0,turnBlocked=false;
 function frame(now){
+  if(turnBlocked){last=now;requestAnimationFrame(frame);return;}                          // installeret app på højkant: spillet står stille, til skærmen vendes
   perfCheck(now-last);
   {const v=toW(camX+WW/2,0);VCX=v[0];VCZ=v[1];}
   let dt=Math.min(.033,(now-last)/1000);last=now;if(slow)dt*=.3;time+=dt;
@@ -2269,8 +2282,15 @@ setMobile();
 /* ---------- PWA ---------- */
 /* Hæv APP_VERSION ved hver rettelse, der lægges op. Den vises nederst i menuen og bestemmer service workerens
    cache, så iPad/telefon smider den gamle kopi væk og bruger den nye. */
-const APP_VERSION='1.0.0';
+const APP_VERSION='1.0.1';
 document.getElementById('appVer').textContent='Sænk Skibet · version '+APP_VERSION;
+/* installeret app (hjemmeskærm): kun på langs */
+const installedMQ=matchMedia('(display-mode: fullscreen), (display-mode: standalone)');
+function syncTurn(){const inst=installedMQ.matches||navigator.standalone===true;document.body.classList.toggle('pwa',inst);
+  turnBlocked=inst&&portraitMQ.matches;
+  if(inst&&screen.orientation&&screen.orientation.lock)screen.orientation.lock('landscape').catch(()=>{});}   // virker på Android; iOS afviser, så beskeden tager over
+for(const mq of [installedMQ,portraitMQ])mq.addEventListener?mq.addEventListener('change',syncTurn):mq.addListener(syncTurn);
+syncTurn();
 if('serviceWorker' in navigator&&location.protocol!=='file:')navigator.serviceWorker.register('service-worker.js?v='+encodeURIComponent(APP_VERSION)).catch(e=>console.log('[Sænk Skibet] service worker ikke startet',e));
 
 let initSeed=null;try{const h=location.hash.slice(1);if(/^[A-Za-z0-9._~-]{1,24}$/.test(h))initSeed=h;}catch(e){}
